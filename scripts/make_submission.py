@@ -60,6 +60,9 @@ def main() -> int:
     ap.add_argument("--cells-per-pert", type=int, default=400)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--limit-perts", type=int, default=None, help="smoke test with N perturbations")
+    ap.add_argument("--compress", default=None, choices=[None, "gzip", "lzf"],
+                    help="h5ad compression. Uncompressed is ~8.3 B/nonzero (17 GB here); gzip lands ~4 GB, "
+                         "which is what fits Kaggle's 20 GB working dir. Does NOT reduce prep's RAM need.")
     a = ap.parse_args()
 
     axis = load_gene_axis(a.axis)
@@ -93,7 +96,9 @@ def main() -> int:
         f.attrs["encoding-type"] = "anndata"; f.attrs["encoding-version"] = "0.1.0"
         write_elem(f, "obs", obs)
         write_elem(f, "var", pd.DataFrame(index=pd.Index(axis["symbol"].tolist())))
-        write_elem(f, "X", sparse.csr_matrix((0, len(axis)), dtype=np.float32))
+        dk = {"compression": a.compress} if a.compress else {}
+        write_elem(f, "X", sparse.csr_matrix((0, len(axis)), dtype=np.float32),
+                   dataset_kwargs=dk)
         Xds = sparse_dataset(f["X"])
         for ctx in contexts:
             ctrl = ad.read_h5ad(f"{a.controls}/context_{ctx}.h5ad")

@@ -33,5 +33,16 @@ while true; do
   esac
   sleep 30
 done
-echo "=== output ==="
-"$KAGGLE" kernels output "$SLUG" -p "${OUT_DIR:-./kaggle_out}"
+# Logs only by default. `kernels output` pulls EVERY output file, and for a
+# fetch kernel that is the multi-GB raw data we moved to Kaggle precisely so it
+# would NOT cross this connection. Big outputs stay on Kaggle as a Dataset;
+# only small artifacts are worth --fetch-output.
+echo "=== log tail ==="
+"$KAGGLE" kernels output "$SLUG" -p "${OUT_DIR:-./kaggle_out}" --quiet 2>/dev/null || true
+find "${OUT_DIR:-./kaggle_out}" -name '*.log' -exec tail -30 {} \; 2>/dev/null || true
+if [ "${FETCH_OUTPUT:-0}" = "1" ]; then
+  echo "=== fetching output files (FETCH_OUTPUT=1) ==="
+  "$KAGGLE" kernels output "$SLUG" -p "${OUT_DIR:-./kaggle_out}"
+else
+  echo "(output files left on Kaggle; set FETCH_OUTPUT=1 to download them)"
+fi
