@@ -1,0 +1,60 @@
+# Source dataset registry — the single source of truth for provenance.
+# v1 corpus (locked): H1 + Replogle K562 + RPE1 → 3 lines across 2 datasets,
+# enough to run BOTH leave-one-line-out and leave-one-dataset-out from day one.
+# Resolve exact accessions/URIs at build time; do NOT trust hard-coded URLs.
+
+datasets:
+  vcc2025_h1:
+    name: "VCC 2025 H1 hESC"
+    uri: "gs://arc-institute-virtual-cell-atlas/virtual-cell-challenge/"  # resolve exact path
+    chemistry: "10x_flex"        # MATCHED to the 2026 challenge
+    modality: "CRISPRi"          # MATCHED
+    cell_lines: ["H1"]
+    raw_counts: true
+    where: "laptop (small; dev here)"
+    notes: "Most valuable reference: matched chemistry + modality. ~300k cells, 300 perts."
+
+  replogle2022:
+    name: "Replogle et al. 2022 genome-scale CRISPRi"
+    uri: "RESOLVE"               # GEO/Plus — resolve accession at build time
+    chemistry: "not_10x_flex"    # CRISPRi but different chemistry — quantify the gap
+    modality: "CRISPRi"
+    cell_lines: ["K562", "RPE1"]
+    raw_counts: true
+    where: "Aqua cluster (genome-scale; ~2.5M cells)"
+    notes: "K562 genome-wide overlaps most VCC panel genes. RPE1 essential-gene screen."
+
+# Shelved on purpose (wrong modality for a knockdown transfer corpus):
+#   tahoe_100m: chemical perturbations — tag and defer, do not integrate into v1.
+# Expand later (Phase 1+): nadig2025 (HepG2, Jurkat), jiang2025 (6 cancer lines).
+
+# Annotation used to resolve the axis's symbols to stable Ensembl IDs.
+# GENCODE v32 is not a preference, it is a measurement: 18533/18533 axis symbols
+# are present in v32 vs 17974 in v50, which identifies the axis as 10x's
+# GRCh38-2020-A reference. Pin it. Remapping to a current release would silently
+# change join keys -- 10 of 12 GENCODE/HGNC disagreements name an ID that does
+# not exist in v32 at all (e.g. SOD2: HGNC says ENSG00000291237, v32 has
+# ENSG00000112096). See artifacts/ensembl_map_report.md.
+annotation:
+  primary:
+    name: "GENCODE v32 (= 10x GRCh38-2020-A)"
+    file: "data/annotation/gencode.v32.annotation.gtf.gz"
+    uri: "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_32/gencode.v32.annotation.gtf.gz"
+    sha256: "da9dc827e9a111c9bde60c55f55b7d37ffebc4649fc01f0745a670240e939ed4"
+    role: "authoritative gene_name -> gene_id for the axis"
+  tiebreak:
+    name: "HGNC complete set"
+    file: "data/annotation/hgnc_complete_set.txt"
+    uri: "https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt"
+    sha256: "d63733c257ffeca6116f6fd401960da8ed113d213463bc0d1a6be26dc87e7f13"
+    role: "breaks ties among equally-curated v32 candidates; NOT trusted over v32"
+    downloaded: "2026-08-24"   # this file is unversioned upstream; the hash pins it
+
+challenge:
+  gene_axis_source: "gene_names.csv"     # from the 2026 validation bundle
+  gene_axis_annotation: "GENCODE v32"
+  n_genes_expected: 18533
+  cells_per_pert: 400
+  target_median_umi: 20000
+  contexts_validation: ["A", "B", "C"]
+  contexts_final: ["D", "E", "F"]

@@ -1,0 +1,40 @@
+# Download manifest for 02_fetch_login.sh (login node only — compute nodes are offline).
+# Tab-separated: dest_relative_path <TAB> url <TAB> sha256_or_SKIP
+#
+# CLAUDE.md/PLAN.md: "resolve exact accessions at build time — do not trust
+# hard-coded URLs." Entries marked RESOLVE are deliberately not guessed; fill
+# them from the live accession before running, and record the sha256 you got so
+# the next tier can verify rather than re-trust.
+#
+# H1 (VCC 2025) — verified live 2026-08-24, Arc public bucket, no auth needed.
+data/raw/vcc2025_h1/gene_names.csv	https://storage.googleapis.com/arc-institute-virtual-cell-atlas/virtual-cell-challenge/2025/gene_names.csv	SKIP
+data/raw/vcc2025_h1/pert_counts_Training.csv	https://storage.googleapis.com/arc-institute-virtual-cell-atlas/virtual-cell-challenge/2025/train/pert_counts_Training.csv	SKIP
+data/raw/vcc2025_h1/adata_Training.h5ad	https://storage.googleapis.com/arc-institute-virtual-cell-atlas/virtual-cell-challenge/2025/train/adata_Training.h5ad	SKIP
+# The other two H1 splits — 6.45 GB and 11.13 GB. Uncomment to take the full
+# 300-perturbation H1 reference (Training alone is 150 perts / 13 panel genes).
+#data/raw/vcc2025_h1/adata_Validation.h5ad	https://storage.googleapis.com/arc-institute-virtual-cell-atlas/virtual-cell-challenge/2025/validation/adata_Validation.h5ad	SKIP
+#data/raw/vcc2025_h1/adata_Test.h5ad	https://storage.googleapis.com/arc-institute-virtual-cell-atlas/virtual-cell-challenge/2025/test/adata_Test.h5ad	SKIP
+#
+# Replogle 2022 — RESOLVED 2026-08-24. Figshare+ 20029387 is the original deposit
+# (DOI 10.25452/figshare.plus.20029387.v1) but stores matrices DENSE: the K562
+# genome-wide single-cell file is 61.31 GB there. scPerturb (Zenodo 13350497)
+# mirrors the identical matrix — same 1,989,578 x 8,248 dense float32 — with gzip
+# compression, at 8.20 GB. Same data, 7.5x smaller. Use the mirror.
+#
+# ⚠️ Only the GENOME-WIDE screen is useful. The two "essential" screens cover
+# ZERO of the 300 challenge perturbations: the panel is built from non-essential
+# genes, because a knockdown that kills the cell has no measurable response.
+# Verified — essential∩panel = 0/2057 and 0/2390 (p ~ 2e-28 by chance).
+# So K562_essential (9.93 GB) and rpe1 (8.10 GB) are deliberately NOT fetched.
+data/raw/replogle2022/ReplogleWeissman2022_K562_gwps.h5ad	https://zenodo.org/api/records/13350497/files/ReplogleWeissman2022_K562_gwps.h5ad/content	md5:13db594f8f1d2ccb88fec44a13e414dc
+#
+# Pseudobulk (per-perturbation profiles, ~500 MB total). These carry the full
+# perturbation lists and the effect sizes used by the floor predictor, so most
+# corpus questions can be answered without any single-cell download.
+data/raw/replogle2022/K562_gwps_raw_bulk_01.h5ad	https://ndownloader.figshare.com/files/35774443	SKIP
+data/raw/replogle2022/rpe1_raw_bulk_01.h5ad	https://ndownloader.figshare.com/files/35775581	SKIP
+data/raw/replogle2022/K562_essential_raw_bulk_01.h5ad	https://ndownloader.figshare.com/files/35773070	SKIP
+#
+# Annotation — needed on Aqua too, for Phase 2 harmonization by Ensembl ID.
+data/annotation/gencode.v32.annotation.gtf.gz	https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_32/gencode.v32.annotation.gtf.gz	da9dc827e9a111c9bde60c55f55b7d37ffebc4649fc01f0745a670240e939ed4
+data/annotation/hgnc_complete_set.txt	https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt	d63733c257ffeca6116f6fd401960da8ed113d213463bc0d1a6be26dc87e7f13

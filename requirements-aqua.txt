@@ -1,0 +1,32 @@
+# Aqua-specific requirements. DO NOT use requirements.lock.txt on Aqua.
+#
+# Aqua is RHEL 7.6 => glibc 2.17. Every compiled pin in requirements.lock.txt
+# ships only manylinux_2_24/2_27/2_28 wheels (glibc 2.24-2.28), so none of them
+# install there. Verified against PyPI, 2026-08-24:
+#
+#     numpy 2.5.2      manylinux_2_27, _2_28     -> needs >= glibc 2.27
+#     scipy 1.18.1     manylinux_2_27, _2_28
+#     pandas 2.3.3     manylinux_2_24, _2_28
+#     pyarrow 25.0.1   manylinux_2_28
+#     h5py 3.16.0      manylinux_2_28
+#
+# The ceilings below are the NEWEST release of each package that still publishes
+# a cp312 manylinux2014 / manylinux_2_17 wheel, i.e. the newest that runs on
+# glibc 2.17. They are `<=` and not `<next` on purpose: pandas 2.3.2 has a
+# glibc-2.17 wheel and 2.3.3 does not, so a range would silently re-break it.
+#
+# Install with --only-binary=:all: so pip fails fast instead of spending an hour
+# attempting (and failing) a source build of numpy against RHEL 7's toolchain.
+#
+# Version skew vs the laptop is small and deliberate: anndata is identical,
+# pandas differs by a patch. Re-check these ceilings whenever the lock moves.
+
+anndata>=0.12.10           # pure python — same version as the laptop
+scanpy>=1.10               # pure python
+numpy>=1.26,<=2.2.6
+scipy>=1.11,<=1.16.3
+pandas>=2.2,<=2.3.2
+pyarrow>=14,<=20.0.0
+h5py<=3.14.0
+scikit-learn<=1.7.2
+pyyaml>=6

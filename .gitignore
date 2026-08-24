@@ -1,0 +1,23 @@
+# Data: 39 GB and growing. Every byte of it is re-downloadable from
+# config/fetch_manifest.tsv, and a 17 GB submission or a 15 GB harmonized
+# matrix in git history is unrecoverable bloat.
+data/
+
+# Built artifacts. gene_axis.parquet is rebuilt by scripts/build_gene_axis.py +
+# build_ensembl_map.py from pinned, checksummed sources, so the recipe is
+# versioned instead of the output. The mapping CSV/report ARE tracked (below)
+# because they are small and are the audit trail for the Ensembl decisions.
+artifacts/*.parquet
+
+# Environments — rebuilt from requirements*.txt, and platform-specific
+# (.venv is glibc-2.28 linux; .venv-aqua is glibc-2.17 RHEL7).
+.venv/
+.venv-aqua/
+
+# Kernel outputs pulled back from Kaggle
+kaggle_out/
+logs/
+
+__pycache__/
+*.pyc
+*.egg-info/

@@ -1,0 +1,18 @@
+# Runtime floors + the one ceiling that matters.
+#
+# pandas <3 is deliberate, not incidental. CLAUDE.md requires that identical
+# code run unchanged on laptop, Kaggle, Colab and Aqua; those base images ship
+# pandas 2.x, while a bare ">=2.0" resolves to 3.0.x here. pandas 3.0 changed
+# the default string dtype and made copy-on-write unconditional, so developing
+# against it would silently produce code the other tiers cannot run.
+# The Phase 0 acceptance test is verified green on BOTH 2.3.x and 3.0.x.
+#
+# anndata floor is >=0.12.10 to match what cell-eval (Phase 5 scorer) requires,
+# so the judge env and the scorer env cannot resolve to incompatible anndatas.
+anndata>=0.12.10
+scanpy>=1.10
+scipy>=1.11
+numpy>=1.26
+pandas>=2.2,<3
+pyarrow>=14
+pyyaml>=6

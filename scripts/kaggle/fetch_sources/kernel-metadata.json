@@ -1,0 +1,13 @@
+{
+  "id": "da25b047/vcc-fetch-replogle",
+  "title": "vcc fetch replogle",
+  "code_file": "fetch_sources.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": true,
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": []
+}
