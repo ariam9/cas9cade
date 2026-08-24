@@ -3,59 +3,59 @@
 `vcc prep` needs ~20-30 GB to hold a realistic 360,000-cell submission
 (2.05e9 stored values = 15.3 GB as CSR, plus a copy while encoding). The dev
 laptop has 22 GB and was OOM-killed at both 16 GB and 19 GB ceilings. Kaggle
-gives 32 GB, so the whole build->prep path runs in one session and the 17 GB
-intermediate never crosses a network.
+gives 32 GB, so build->prep runs in one session and the multi-GB intermediate
+never crosses a network.
 
-Output is a .vcc of a few hundred MB, which IS worth pulling back — submission
-happens from the laptop, so no VCC token is needed here.
+Output is a .vcc of a few hundred MB, which IS worth pulling back. Submission
+happens from the laptop, so no VCC token needs to exist here.
 """
-import os, subprocess, sys, time
+import glob, os, subprocess, sys, time
 from pathlib import Path
 
-IN = Path("/kaggle/input/vcc2026-inputs")
 WORK = Path("/kaggle/working")
 REPO = "https://github.com/ariam9/cas9cade"
 
-def sh(cmd, **kw):
+def sh(cmd):
     print(f"$ {cmd}", flush=True)
-    return subprocess.run(cmd, shell=True, check=True, **kw)
+    subprocess.run(cmd, shell=True, check=True)
+
+# Locate the mounted dataset rather than assuming its path. An earlier run
+# built symlinks to a guessed path; os.symlink does NOT verify its target, so
+# they dangled silently and surfaced as a confusing FileNotFoundError much
+# later. Resolve it explicitly and fail loudly here if it is missing.
+print("=== /kaggle/input ===", flush=True)
+for p in sorted(glob.glob("/kaggle/input/*")):
+    print(" ", p, sorted(os.listdir(p))[:9])
+cands = [p for p in glob.glob("/kaggle/input/*") if Path(p, "gene_names.csv").exists()]
+if not cands:
+    sys.exit("FATAL: no mounted dataset contains gene_names.csv — check dataset_sources")
+IN = Path(cands[0])
+print(f"using inputs from: {IN}", flush=True)
 
 t0 = time.time()
-sh(f"pip -q install 'git+{REPO}' anndata scipy pandas pyarrow")
-sh("pip -q install vcc-cli")
-
-# Lay the repo's expected paths out under /kaggle/working.
-(WORK / "data/bundle").mkdir(parents=True, exist_ok=True)
-(WORK / "data/raw/replogle2022").mkdir(parents=True, exist_ok=True)
-(WORK / "artifacts").mkdir(exist_ok=True)
-for n in ("context_A.h5ad", "context_B.h5ad", "context_C.h5ad",
-          "gene_names.csv", "pert_counts.csv", "manifest.json"):
-    os.symlink(IN / n, WORK / "data/bundle" / n)
-os.symlink(IN / "K562_gwps_raw_bulk_01.h5ad",
-           WORK / "data/raw/replogle2022/K562_gwps_raw_bulk_01.h5ad")
-
+sh(f"pip -q install 'git+{REPO}' vcc-cli")
 os.chdir(WORK)
 sh(f"git clone -q {REPO} repo")
+(WORK / "artifacts").mkdir(exist_ok=True)
+(WORK / "sub").mkdir(exist_ok=True)
 
-# The axis: symbols + order only. ensembl_id is irrelevant to the submission
-# (the emitter indexes by symbol), so no GENCODE download is needed here.
-sh("python repo/scripts/build_gene_axis.py data/bundle/gene_names.csv "
-   "-o artifacts/gene_axis.parquet")
+# Axis: symbols + order only. ensembl_id is irrelevant to the submission (the
+# emitter indexes by symbol), so no GENCODE download is needed here.
+sh(f"python repo/scripts/build_gene_axis.py {IN}/gene_names.csv -o artifacts/gene_axis.parquet")
 
-# gzip the h5ad: uncompressed it is 17 GB and /kaggle/working caps at ~20 GB.
-sh("python repo/scripts/make_submission.py -o data/submission/submission.h5ad "
-   "--compress gzip")
+# gzip: uncompressed this is 17 GB and /kaggle/working caps at ~20 GB.
+sh(f"python repo/scripts/make_submission.py -o sub/submission.h5ad --compress gzip "
+   f"--axis artifacts/gene_axis.parquet --perts {IN}/pert_counts.csv "
+   f"--bulk {IN}/K562_gwps_raw_bulk_01.h5ad --controls {IN}")
 
-sh("python -m vccjudge.contract data/submission/submission.h5ad "
-   "--axis artifacts/gene_axis.parquet --perts data/bundle/pert_counts.csv "
-   "--contexts A,B,C")
+sh(f"python -m vccjudge.contract sub/submission.h5ad --axis artifacts/gene_axis.parquet "
+   f"--perts {IN}/pert_counts.csv --contexts A,B,C")
 
-sh("vcc prep data/submission/submission.h5ad -g data/bundle/gene_names.csv "
-   "--perts data/bundle/pert_counts.csv -o /kaggle/working/prediction.vcc")
+sh(f"vcc prep sub/submission.h5ad -g {IN}/gene_names.csv --perts {IN}/pert_counts.csv "
+   f"-o {WORK}/prediction.vcc")
 
-# Keep only the .vcc as kernel output; everything else is huge and disposable.
-for p in ("data", "repo", "artifacts"):
-    sh(f"rm -rf /kaggle/working/{p}")
+# Keep only the .vcc as kernel output; the rest is large and disposable.
+sh("rm -rf /kaggle/working/sub /kaggle/working/repo /kaggle/working/artifacts")
 print(f"\nDONE in {time.time()-t0:.0f}s")
 for p in sorted(WORK.iterdir()):
     print(f"  {p.stat().st_size/2**20:10,.1f} MB  {p.name}")
