@@ -23,13 +23,17 @@ def sh(cmd):
 # built symlinks to a guessed path; os.symlink does NOT verify its target, so
 # they dangled silently and surfaced as a confusing FileNotFoundError much
 # later. Resolve it explicitly and fail loudly here if it is missing.
-print("=== /kaggle/input ===", flush=True)
-for p in sorted(glob.glob("/kaggle/input/*")):
-    print(" ", p, sorted(os.listdir(p))[:9])
-cands = [p for p in glob.glob("/kaggle/input/*") if Path(p, "gene_names.csv").exists()]
-if not cands:
-    sys.exit("FATAL: no mounted dataset contains gene_names.csv — check dataset_sources")
-IN = Path(cands[0])
+print("=== /kaggle/input tree ===", flush=True)
+for root, dirs, files in os.walk("/kaggle/input"):
+    if files:
+        print(" ", root, sorted(files)[:9], flush=True)
+# Search RECURSIVELY: Kaggle mounted this at /kaggle/input/datasets/<user>/<slug>/,
+# not the /kaggle/input/<slug>/ a one-level glob assumed. Anchor on a file we
+# know must be there rather than on any assumed layout.
+hits = glob.glob("/kaggle/input/**/gene_names.csv", recursive=True)
+if not hits:
+    sys.exit("FATAL: gene_names.csv not found anywhere under /kaggle/input — check dataset_sources")
+IN = Path(hits[0]).parent
 print(f"using inputs from: {IN}", flush=True)
 
 t0 = time.time()
