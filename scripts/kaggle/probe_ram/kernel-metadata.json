@@ -1,0 +1,14 @@
+{
+  "id": "da25b047/vcc-probe-ram",
+  "title": "vcc probe ram",
+  "code_file": "probe_ram.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": true,
+  "enable_internet": true,
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": []
+}
