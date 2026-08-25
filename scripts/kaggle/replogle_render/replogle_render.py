@@ -20,7 +20,21 @@ import glob, json, os, subprocess, sys, time
 from pathlib import Path
 
 WORK = Path("/kaggle/working")
-TMP = Path("/kaggle/temp")          # ~1 TB here; /kaggle/working is capped at ~20 GB
+# Scratch: /kaggle/working is capped at ~20 GB, far too small for an 8.2 GB
+# download plus a 61 GB decompressed read. Pick the first location that actually
+# EXISTS and has room -- probe_ram.py reported /kaggle/temp absent and /tmp with
+# ~1 TB free, and hardcoding /kaggle/temp anyway cost a run.
+def _scratch(need_gb=30):
+    import shutil
+    for c in ("/kaggle/temp", "/tmp", "/kaggle/working"):
+        d = Path(c)
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+            if shutil.disk_usage(d).free / 2**30 >= need_gb:
+                return d
+        except Exception:
+            continue
+    sys.exit("FATAL: no scratch dir with >=30 GB free")
 REPO = "https://github.com/ariam9/cas9cade"
 URL = ("https://zenodo.org/api/records/13350497/files/"
        "ReplogleWeissman2022_K562_gwps.h5ad/content")
@@ -47,6 +61,9 @@ sys.path.insert(0, f"{WORK}/repo/src")
 
 import numpy as np, pandas as pd, h5py, anndata as ad
 from scipy import sparse
+
+TMP = _scratch()
+print(f"scratch: {TMP} ({__import__('shutil').disk_usage(TMP).free/2**30:,.0f} GB free)", flush=True)
 
 # ---- inputs, verified before any expensive work ---------------------------
 hits = sorted(glob.glob("/kaggle/input/**/gene_names.csv", recursive=True))
