@@ -1,0 +1,13 @@
+{
+  "id": "da25b047/vcc-replogle-render",
+  "title": "vcc replogle render",
+  "code_file": "replogle_render.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": true,
+  "dataset_sources": ["da25b047/vcc2026-inputs"],
+  "competition_sources": [],
+  "kernel_sources": []
+}
