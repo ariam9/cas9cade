@@ -21,3 +21,8 @@ logs/
 __pycache__/
 *.pyc
 *.egg-info/
+
+# Judge artifacts: bundles, baselines and scored aggregates are rebuilt by
+# scripts/phase5_certify.py from a rendered reference, and the baseline
+# prediction alone is ~300 MB per 6k cells.
+data/judge/
