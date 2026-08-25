@@ -61,6 +61,12 @@ def main() -> int:
     a = ap.parse_args()
 
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
+    # Re-running must be safe: prep-real-bundle refuses a non-empty target
+    # ("two bundles' files interleaved in one directory are unreadable"), which
+    # is right, so clear it rather than passing --force blindly.
+    import shutil
+    if (out / "bundle").exists():
+        shutil.rmtree(out / "bundle")
     preset = ["--preset", "vcc2026", "--pert-col", a.pert_col]
     base_pred = out / "baseline_pred.h5ad"
 
