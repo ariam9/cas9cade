@@ -28,18 +28,17 @@ while true; do
     *complete*|*COMPLETE*) break ;;
     *error*|*ERROR*|*cancel*|*CANCEL*)
       echo "=== FAILED — last log lines ==="
-      "$KAGGLE" kernels logs "$SLUG" -p /tmp 2>/dev/null | tail -40 || true
+      "$KAGGLE" kernels logs "$SLUG" 2>/dev/null | tail -40 || true
       exit 1 ;;
   esac
   sleep 30
 done
-# Logs only by default. `kernels output` pulls EVERY output file, and for a
-# fetch kernel that is the multi-GB raw data we moved to Kaggle precisely so it
-# would NOT cross this connection. Big outputs stay on Kaggle as a Dataset;
-# only small artifacts are worth --fetch-output.
+# Logs only by default. `kernels output -q` does NOT restrict which files are
+# fetched -- -q only silences progress -- so using it here would drag the
+# multi-GB kernel outputs across exactly the link this is meant to protect.
+# `kernels logs` is a separate subcommand that returns only the log.
 echo "=== log tail ==="
-"$KAGGLE" kernels output "$SLUG" -p "${OUT_DIR:-./kaggle_out}" --quiet 2>/dev/null || true
-find "${OUT_DIR:-./kaggle_out}" -name '*.log' -exec tail -30 {} \; 2>/dev/null || true
+"$KAGGLE" kernels logs "$SLUG" 2>/dev/null | tail -40 || true
 if [ "${FETCH_OUTPUT:-0}" = "1" ]; then
   echo "=== fetching output files (FETCH_OUTPUT=1) ==="
   "$KAGGLE" kernels output "$SLUG" -p "${OUT_DIR:-./kaggle_out}"

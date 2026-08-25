@@ -30,10 +30,20 @@ for root, dirs, files in os.walk("/kaggle/input"):
 # Search RECURSIVELY: Kaggle mounted this at /kaggle/input/datasets/<user>/<slug>/,
 # not the /kaggle/input/<slug>/ a one-level glob assumed. Anchor on a file we
 # know must be there rather than on any assumed layout.
-hits = glob.glob("/kaggle/input/**/gene_names.csv", recursive=True)
+hits = sorted(glob.glob("/kaggle/input/**/gene_names.csv", recursive=True))
 if not hits:
     sys.exit("FATAL: gene_names.csv not found anywhere under /kaggle/input — check dataset_sources")
 IN = Path(hits[0]).parent
+# Check EVERY input now. Resolving only gene_names.csv and assuming the rest sit
+# beside it is the same assumed-layout bug fixed twice already -- and it fails
+# late: make_submission loads the multi-GB Replogle bulk before it ever opens
+# context_A.h5ad, so a missing control file wastes the expensive step first.
+REQUIRED = ("gene_names.csv", "pert_counts.csv", "K562_gwps_raw_bulk_01.h5ad",
+            "context_A.h5ad", "context_B.h5ad", "context_C.h5ad")
+absent = [n for n in REQUIRED if not (IN / n).exists()]
+if absent:
+    sys.exit(f"FATAL: {IN} is missing {absent}")
+print("all required inputs present", flush=True)
 print(f"using inputs from: {IN}", flush=True)
 
 t0 = time.time()
@@ -55,8 +65,12 @@ sh(f"python repo/scripts/make_submission.py -o sub/submission.h5ad --compress gz
 sh(f"python -m vccjudge.contract sub/submission.h5ad --axis artifacts/gene_axis.parquet "
    f"--perts {IN}/pert_counts.csv --contexts A,B,C")
 
-sh(f"vcc prep sub/submission.h5ad -g {IN}/gene_names.csv --perts {IN}/pert_counts.csv "
-   f"-o {WORK}/prediction.vcc")
+# NOT `vcc prep`: it needs ~29.7 GB per 1e9 stored values and this submission has
+# 2.06e9, so it is OOM-killed on Kaggle's 31.3 GB (measured -- see probe_ram).
+# make_vcc.py produces an equivalent .vcc by streaming; X is passed through
+# byte-identically by prep, so the only difference is metadata encoding.
+sh(f"python repo/scripts/make_vcc.py sub/submission.h5ad -o {WORK}/prediction.vcc "
+   f"--tmpdir /kaggle/temp")
 
 # Keep only the .vcc as kernel output; the rest is large and disposable.
 sh("rm -rf /kaggle/working/sub /kaggle/working/repo /kaggle/working/artifacts")

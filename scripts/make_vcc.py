@@ -33,9 +33,14 @@ def categoricalize_obs(path: Path, cols=("target_gene", "context")) -> None:
 
     with h5py.File(path, "r+") as f:
         obs = f["obs"]
+        missing = [c for c in cols if c not in obs]
+        if missing:
+            # This path deliberately skips `vcc prep`, so it is the last gate before
+            # upload. Silently packaging a file with no target_gene/context produces a
+            # well-formed .vcc that Arc rejects server-side -- a slow way to learn it.
+            raise SystemExit(f"FATAL: .obs is missing {missing}; refusing to package. "
+                             f"Run `python -m vccjudge.contract` first.")
         for c in cols:
-            if c not in obs:
-                continue
             item = obs[c]
             if isinstance(item, h5py.Group):
                 continue  # already categorical
@@ -63,6 +68,10 @@ def main() -> int:
     ap.add_argument("h5ad")
     ap.add_argument("-o", "--out", required=True)
     ap.add_argument("--level", type=int, default=3, help="zstd level (3 is prep-like and fast)")
+    ap.add_argument("--tmpdir", default=None,
+                    help="staging dir. Defaults to the OUTPUT's parent, never /tmp: /tmp is a "
+                         "12 GB RAM-backed tmpfs on the dev box, and staging needs ~1.3x the "
+                         "input (zstd --rm frees the source only after compressing).")
     ap.add_argument("--keep-temp", action="store_true")
     a = ap.parse_args()
 
@@ -70,7 +79,22 @@ def main() -> int:
     if shutil.which("zstd") is None:
         sys.exit("FATAL: zstd not on PATH (apt-get install zstd / conda install zstd)")
 
-    tmp = Path(tempfile.mkdtemp(prefix="vccpack-"))
+    stage_root = Path(a.tmpdir) if a.tmpdir else Path(a.out).resolve().parent
+    stage_root.mkdir(parents=True, exist_ok=True)
+    free = shutil.disk_usage(stage_root).free
+    need = int(src.stat().st_size * 1.3)
+    if free < need:
+        sys.exit(f"FATAL: {stage_root} has {free/2**30:.1f} GB free; staging needs ~{need/2**30:.1f} GB")
+    tmp = Path(tempfile.mkdtemp(prefix="vccpack-", dir=stage_root))
+    try:
+        return _pack(src, tmp, a)
+    finally:
+        # A failed run must not leave a copy of a 17 GB submission behind.
+        if not a.keep_temp:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _pack(src: Path, tmp: Path, a) -> int:
     staged = tmp / "pred.h5ad"
     print(f"[1/4] copying {src} -> {staged}  ({src.stat().st_size/2**30:.1f} GB)")
     shutil.copy2(src, staged)          # streamed by the OS, not read into RAM
@@ -85,8 +109,6 @@ def main() -> int:
     print(f"[4/4] tar -> {a.out}")
     with tarfile.open(a.out, "w") as t:
         t.add(tmp / "pred.h5ad.zst", arcname="pred.h5ad.zst")
-    if not a.keep_temp:
-        shutil.rmtree(tmp, ignore_errors=True)
     print(f"wrote {a.out}  ({Path(a.out).stat().st_size/2**20:,.0f} MB)")
     return 0
 

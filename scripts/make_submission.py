@@ -60,7 +60,7 @@ def main() -> int:
     ap.add_argument("--cells-per-pert", type=int, default=400)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--limit-perts", type=int, default=None, help="smoke test with N perturbations")
-    ap.add_argument("--compress", default=None, choices=[None, "gzip", "lzf"],
+    ap.add_argument("--compress", default=None, choices=["gzip","lzf"],
                     help="h5ad compression. Uncompressed is ~8.3 B/nonzero (17 GB here); gzip lands ~4 GB, "
                          "which is what fits Kaggle's 20 GB working dir. Does NOT reduce prep's RAM need.")
     a = ap.parse_args()
