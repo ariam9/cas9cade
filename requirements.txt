@@ -16,3 +16,11 @@ numpy>=1.26
 pandas>=2.2,<3
 pyarrow>=14
 pyyaml>=6
+
+# The competition's own scorer. Phase 4 computes reference DE with its routine
+# and Phase 5 wraps its vcc2026 preset, so reference DE and scored DE cannot
+# drift -- CLAUDE.md requires them to be the same code path. It was installed
+# ad hoc locally and therefore missing on Kaggle, where Phase 4's DE step died
+# on `import cell_eval2` after the deltas had already been computed.
+# ⚠️ cell-eval2, NOT cell-eval: the latter is the 2025 scorer (18,080 genes).
+cell-eval2>=0.16
