@@ -186,7 +186,12 @@ obs = pd.DataFrame({
     "cell_line": "K562", "dataset": "replogle2022", "source_row": rows,
 })
 out_ad = ad.AnnData(X=M, obs=obs, var=pd.DataFrame(index=pd.Index(axis_sym)))
-dest = WORK / "replogle_K562__seed0.h5ad"
+# The rendered matrix stays on SCRATCH, not /kaggle/working. A 546 MB kernel
+# output did not survive Kaggle's output mechanism (it came back as 889 bytes,
+# and `kernels output` then stalled at 0 bytes), and hauling it over the wire
+# was never the plan anyway: PLAN.md reduces raw cells to small artifacts on the
+# big tier and ships only those. So Phase 4 runs HERE and only parquets go home.
+dest = TMP / "replogle_K562__seed0.h5ad"
 out_ad.write_h5ad(dest, compression="gzip")
 achieved = float(np.median(np.asarray(M.sum(1)).ravel()))
 json.dump({"n_cells": int(M.shape[0]), "n_groups": len(meta), "n_short": n_short,
@@ -194,6 +199,20 @@ json.dump({"n_cells": int(M.shape[0]), "n_groups": len(meta), "n_short": n_short
            "thin_p": p, "depth_deficit": deficit,
            "genes_mapped": int((col >= 0).sum()), "nnz": int(M.nnz)},
           open(WORK / "replogle_K562__seed0.json", "w"), indent=2)
-sh(f"rm -rf {WORK}/repo")
-print(f"\nDONE in {time.time()-t0:.0f}s -> {dest} ({dest.stat().st_size/2**20:,.0f} MB)")
-print(f"  {M.shape[0]:,} cells | nnz {M.nnz:,} | median UMI {achieved:,.0f}")
+print(f"\nrendered -> {dest} ({dest.stat().st_size/2**20:,.0f} MB, on scratch)")
+print(f"  {M.shape[0]:,} cells | nnz {M.nnz:,} | median UMI {achieved:,.0f}", flush=True)
+del M, out_ad
+
+# ---- Phase 4 here: reduce to the small artifacts the judge consumes -------
+# K562 is a DEFICIT, so the render neither thinned (p=1.0) nor subsampled all
+# but 10 groups -- the rendered file IS effectively full depth for these
+# perturbations, so one file legitimately serves both the Role A (delta) and
+# Role B (DE) sources. That is NOT true for H1, where they must differ.
+sh(f"python {WORK}/repo/scripts/phase4_precompute.py "
+   f"--dataset replogle2022 --cell-line K562 "
+   f"--harmonized {dest} --rendered {dest} "
+   f"--out {WORK}/reference --shard-size 20")
+sh(f"rm -rf {WORK}/repo {WORK}/reference/de_shards__replogle2022__K562")
+print(f"\nDONE in {time.time()-t0:.0f}s")
+for f in sorted((WORK / "reference").glob("*")):
+    print(f"  {f.stat().st_size/2**20:8,.1f} MB  {f.name}")
