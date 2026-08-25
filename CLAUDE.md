@@ -40,15 +40,25 @@ Install is `uv tool install vcc-cli` (the command is `vcc`). ⚠️ Do **not** `
 
 ## Engineering rules
 - **Develop-small, run-big:** write and unit-test every stage on the small H1 slice locally, then run the *identical* code on Replogle on the Aqua cluster. The pinned axis + contract are what make the code identical across tiers.
-- **Downsample before DE, always.** Any differential expression computed off non-challenge-regime data (≠ 400 cells / ~20k median UMI) is a bug — `nreal` depends on cell count and depth.
+- **Downsample before DE, always.** Any differential expression computed off non-challenge-regime data (≠ 400 cells / ~20k median UMI) is a bug — `nreal` depends on cell count and depth. **This governs the DE machinery only.** A pseudobulk delta is a mean vector, not DE: as a *transfer signal* it should be estimated at full depth, where H1 has 7.05x the total counts and therefore ~2.7x smaller standard error. Render in-regime for anything that decides significance (DE tables, `nreal`, the anchors, the held-out reference); keep full depth for effect-size estimates a model learns from. Compute both; do not conflate them.
 - **Resumable + shardable:** heavy stages (Phase 3–4) are per-(cell line, perturbation) shards with per-shard checkpoints, so a killed batch job resumes.
 - **Modality is not fungible:** CRISPRi vs CRISPRa/KO/chemical are tagged and never silently pooled.
 - **Leakage:** any graph / co-essentiality / paralog features must be built from sources **excluding the held-out line/dataset**.
 - **Everything seeded and cached.** Regime rendering, half-splits, subsampling are deterministic.
 - Prefer stdlib + `anndata`/`scanpy`/`scipy.sparse`/`pandas`/`pyarrow`. Keep deps light so code runs on laptop, Kaggle, Colab, and Aqua unchanged.
 
+## Resource discipline — this machine will OOM and take the session with it
+- **`/tmp` is tmpfs (RAM-backed, 12 GB).** `df` reports it like a disk; it is not. All scratch goes to `data/` on `/mnt/data`, never `/tmp`.
+- **Anything that loads a multi-GB matrix runs under `scripts/capped.sh`** (`bash scripts/capped.sh --mem 14G -- <cmd>`). A capped process dies alone; uncapped, the kernel OOM killer picks the session. This has already destroyed an in-flight competition upload once.
+- **Never load a submission-sized matrix whole.** 360,000 x 18,533 is ~2.05e9 stored values = 15.3 GB minimum. `vccjudge.contract` and `phase2_harmonize` both stream for this reason; anything new that touches `.X` must too.
+- **Verify environment facts before depending on them** — that a path exists, that a filesystem is what you think, that a remote job's state is what you assume. Every expensive failure so far came from asserting one of these instead of checking it.
+
 ## Compute placement (see PLAN.md table)
-Laptop: scaffold, dev-on-H1, scorer + certification, harness, floor. Aqua: raw download, harmonize/render/precompute on Replogle (batch array jobs). Kaggle/Colab: GPU bursts (Phase 7) + hosting the derived corpus read-only. **The raw cells are touched once (Phases 1–4 → small artifacts); the judge runs on those artifacts.**
+**Laptop:** all development and unit tests, the scorer + certification, the harness. Fast iteration lives here.
+**Kaggle (via `kaggle` CLI, `scripts/kaggle/`):** anything data-heavy or GPU-bound — raw downloads, Phase 3–4 at scale, submission builds, Phase 7. 31.3 GB RAM, ~1 TB in `/kaggle/temp`, but `/kaggle/working` caps at 19.5 GB and sessions die at 12 h.
+**Aqua (PBS, `scripts/aqua/`):** kept but no longer the backbone — no compute-node internet and an 80-core/10-job cap made it a poor fit for data-heavy work. Still fine for free CPU-parallel sweeps once the corpus is small.
+
+**The raw cells are touched once (Phases 1–4 → small artifacts); the judge runs on those artifacts.** Develop-small/run-big is not a preference here: a bug that surfaces in seconds locally costs a 30-minute round trip on Kaggle.
 
 ## Definition of done for Phase 0
 `python scripts/phase0_acceptance.py` prints `PASS — Phase 0 certified`. Do not start Phase 1 until it does.
