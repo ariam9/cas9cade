@@ -35,8 +35,14 @@ def sh(cmd):
 
 
 t0 = time.time()
-sh(f"pip -q install 'git+{REPO}'")
+# Clone FIRST, then install the repo's own requirements.txt. Our pyproject
+# deliberately declares dependencies = [] so requirements.txt stays the single
+# source of truth -- which means `pip install git+<repo>` installs NO deps and
+# the kernel dies on `import anndata`. Installing from requirements.txt keeps
+# that single source of truth instead of duplicating a package list here.
 sh(f"git clone -q {REPO} {WORK}/repo")
+sh(f"pip -q install -r {WORK}/repo/requirements.txt")
+sh(f"pip -q install -e {WORK}/repo --no-deps")
 sys.path.insert(0, f"{WORK}/repo/src")
 
 import numpy as np, pandas as pd, h5py, anndata as ad
