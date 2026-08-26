@@ -31,9 +31,11 @@ Then confirm against Arc's own validator, which checks the same things (gene set
 vcc prep prediction.h5ad -g gene_names.csv --perts pert_counts.csv --dry-run
 ```
 
-`vccjudge.contract` is the fast local gate you run in CI and on every intermediate artifact; `vcc prep --dry-run` is the authoritative pre-flight before submitting. Neither replaces the other — if they ever disagree, **`vcc prep` is right and `vccjudge.contract` has a bug.**
+`vccjudge.contract` is the fast local gate you run in CI and on every intermediate artifact. `vcc prep --dry-run` is the authoritative pre-flight and wins any disagreement — **but it cannot run on our hardware**: it needs ~29.7 GB of RAM per 1e9 stored values, and a realistic submission (360,000 x ~5,700 nnz = 2.06e9) wants ~61 GB. Measured: OOM-killed at 19 GB locally and at 31.3 GB on Kaggle. So `vccjudge.contract` is in practice the only gate that runs, and it is cross-certified against `vcc prep --dry-run` on files small enough for prep to handle.
 
-Install is `uv tool install vcc-cli` (the command is `vcc`). ⚠️ Do **not** `pip install vcc` — that is an unrelated Varnish package. The submitted artifact is a `.vcc` file produced by `vcc prep`, not the raw `.h5ad`.
+**Package with `scripts/make_vcc.py`, not `vcc prep`.** A `.vcc` is a POSIX tar of `pred.h5ad.zst`, and prep passes `.X` through byte-identically (verified: `data`, `indices`, `indptr` all equal) — its only transformation is cosmetic (obs strings → categorical, plus empty AnnData groups). So `make_vcc.py` streams the same result at a few hundred MB peak. ⚠️ It **skips Arc's validation**, so run it only on a file that has already printed `PASS` above.
+
+Install is `uv tool install vcc-cli` (the command is `vcc`). ⚠️ Do **not** `pip install vcc` — that is an unrelated Varnish package. The submitted artifact is a `.vcc` file, not the raw `.h5ad`.
 
 ## Coordinate system
 `artifacts/gene_axis.parquet` (built by `scripts/build_gene_axis.py` from the bundle's `gene_names.csv`) is the **single source of truth** for gene identity and order. Everything — harmonized data, predictions, submissions — lives on this axis. Cross-dataset joins resolve by **stable Ensembl ID**, not symbol (symbols drift); symbols are for display and for the final `.var_names` only.

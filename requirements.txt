@@ -24,3 +24,12 @@ pyyaml>=6
 # on `import cell_eval2` after the deltas had already been computed.
 # ⚠️ cell-eval2, NOT cell-eval: the latter is the 2025 scorer (18,080 genes).
 cell-eval2>=0.16
+
+# cell-eval2's fast CPU DE backend. Without it cell-eval2 falls back to scanpy,
+# which is ~10x slower: K562's DE hit Kaggle's 12-hour session limit at shard
+# 19 of 20 on scanpy. Verified to produce IDENTICAL nreal to scanpy on a
+# matched slice (8/8 perturbations exact), so this is pure speed, not a
+# different answer. Needs numpy>=2.4.2 / pandas>=2.3.3 -- satisfied here, but
+# NOT on requirements-aqua.txt's glibc-2.17 ceilings, which is fine: Aqua is
+# no longer the run-big tier.
+pdex>=0.3

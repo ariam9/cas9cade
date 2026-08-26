@@ -35,7 +35,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from vccjudge.regime import NON_TARGETING  # noqa: E402
 
 # From EvalConfig.from_preset("vcc2026") — the scorer's own DE contract.
-VCC2026_DE = dict(backend="scanpy", mean_calc="arithmetic", epsilon=1e-9,
+# backend is the ONE field not taken from the preset (which says "auto"): pinning
+# it makes the engine explicit and reproducible. pdex is ~10x faster than scanpy
+# and verified to give IDENTICAL nreal on a matched slice (8/8 exact), so this is
+# speed, not a different answer. cell-eval2 warns engines can disagree -- hence
+# the check rather than the assumption.
+VCC2026_DE = dict(backend="pdex", mean_calc="arithmetic", epsilon=1e-9,
                   input_type="counts", target_sum=1e6, clip_value=None,
                   filter_gene_min_cpm_cell=5.0, fdr_scope="per_pert")
 P_ADJ = 0.05
