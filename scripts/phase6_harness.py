@@ -56,6 +56,13 @@ def main() -> int:
     ap.add_argument("--out", default="data/harness")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--limit-perts", type=int, default=None)
+    ap.add_argument("--all-perts", action="store_true",
+                    help="score EVERY perturbation of the held-out line, not just those the "
+                         "effects source covers. Uncovered ones fall back to the control "
+                         "profile and score ~0 -- which is what the leaderboard does with the "
+                         "28 panel genes no reference measures. Restricting to shared "
+                         "perturbations scores a 22x-easier subset (median nreal 178 vs 8) "
+                         "and inflates the result.")
     ap.add_argument("--max-ntc", type=int, default=None,
                     help="subsample the control arm. The scorer carries it into every "
                          "comparison, so it dominates memory: 18,400 controls x 18,533 "
@@ -96,10 +103,18 @@ def main() -> int:
         ctrl_sum = np.asarray(controls.sum(axis=0)).ravel()
         ctrl_cpm = ctrl_sum / max(ctrl_sum.sum(), 1) * 1e6
         pred = DeltaTransfer(effects=ef, control_cpm=ctrl_cpm)
-        targets = sorted(set(obs.tolist()) & set(ef.index) - {NON_TARGETING})
-        print(f"  predicting from {a.effects_from}: {len(targets)} perturbations in both lines")
-    if a.limit_perts:
-        targets = targets[: a.limit_perts]
+        allp = sorted(set(obs.tolist()) - {NON_TARGETING})
+        if a.all_perts:
+            targets = allp
+            cov = sum(1 for t in targets if t in ef.index)
+            print(f"  predicting from {a.effects_from}: {len(targets)} perturbations, "
+                  f"{cov} covered ({100*cov/len(targets):.1f}%), {len(targets)-cov} fall back to control")
+        else:
+            targets = sorted(set(allp) & set(ef.index))
+            print(f"  predicting from {a.effects_from}: {len(targets)} perturbations in both lines")
+    if a.limit_perts and len(targets) > a.limit_perts:
+        _r = group_rng(ho_ds, ho_line, "__pert_sample__", a.seed)
+        targets = sorted(_r.choice(targets, a.limit_perts, replace=False).tolist())
 
     # Ground truth: the held-out line's own perturbed cells for those targets,
     # plus its controls (the scorer needs the reference arm).

@@ -100,7 +100,7 @@ Then:
 ```bash
 .venv/bin/python scripts/phase6_harness.py \
     --held-out vcc2025_h1/H1 --effects-from replogle2022/K562 \
-    --predictor delta_transfer
+    --predictor delta_transfer --all-perts
 ```
 
 Two floor predictors ship with it — `context_mean` (defines the bottom) and
@@ -195,14 +195,74 @@ Things worth knowing before trusting a number out of this:
 
 ### Measured floors
 
-Held out H1, predicted from K562, 25 perturbations:
+Held out H1, predicted from K562:
 
 | predictor | avg | reading |
 |---|---|---|
-| `context_mean` | −0.117 | predicting *no change* is slightly worse than the 0-anchor, which is the line's mean perturbation response |
-| `delta_transfer` | **0.183** | borrowing K562's effects genuinely helps — `pds` 0.729 — but DE direction and log-FC accuracy go negative |
+| `context_mean` | −0.117 | predicting *no change* is slightly worse than the 0-anchor, which is the line's **mean perturbation response**, not the control profile |
+| `delta_transfer` | **0.105** | borrowing K562's effects genuinely helps — `pds_cosine` 0.628 — but log-FC accuracy goes sharply negative |
 
-The pattern to beat: transfer identifies **which** perturbation well
-(`pds_cosine` 0.729) while getting the **magnitude** wrong (`lfc_nmae` −0.219)
-and expression accuracy pinned at the floor (`mse` 0.000). A real submission
-scored 0.0625 overall with the same shape.
+The pattern to beat: transfer identifies **which** perturbation well while
+getting the **magnitude** wrong (`lfc_nmae` −0.445) and expression accuracy
+pinned at the floor (`mse` exactly 0.000).
+
+### How far to trust a number from this
+
+This has been checked against a real leaderboard submission, and the answer is
+**good for ranking, rough for absolutes**. Read this before quoting a score.
+
+The same predictor, scored three ways:
+
+| metric | shared-only subset | **matched structure** | leaderboard |
+|---|---|---|---|
+| `pds_cosine` | 0.729 | **0.628** | 0.451 |
+| `expr_mse_unbiased_capped_norm` | 0.000 | **0.000** | 0.000 |
+| `de_wilcoxon_direction_fidelity` | +0.518 | **+0.365** | −0.172 |
+| `de_wilcoxon_direction_reach` | −0.020 | **−0.022** | +0.098 |
+| `de_wilcoxon_sig_jaccard` | 0.090 | **0.102** | −0.019 |
+| `de_wilcoxon_lfc_nmae` | −0.219 | **−0.445** | +0.018 |
+| **avg_score** | **0.183** | **0.105** | **0.063** |
+
+**Score only the perturbations your effects source happens to cover and you will
+flatter yourself.** Restricting to perturbations measured in both lines picks a
+22x-easier subset — median `nreal` 178 against 8 for the rest. Passing
+`--all-perts` includes the ~9% with no reference, which fall back to the control
+profile and score ~0, exactly as the leaderboard treats the 28 panel genes no
+dataset measures. That one change moved the score from 0.183 to 0.105 against a
+leaderboard target of 0.063 — **65% of the gap, from experimental design alone**.
+
+**Use `--all-perts` unless you have a specific reason not to.**
+
+What this establishes:
+
+- **Ranking is trustworthy.** `context_mean` < `delta_transfer` locally and on the
+  leaderboard. If the harness says B beats A, believe it.
+- **It responds correctly to design.** Matching the coverage ratio moved it
+  two-thirds of the way to the real number — the behaviour of a calibrated
+  instrument.
+- **`pds` and `mse` track well.** 0.628 vs 0.451, and `mse` pinned at exactly
+  0.000 in all three runs.
+
+What it does **not** establish:
+
+- **Absolute scores.** The residual 0.105 vs 0.063 rests on ONE held-out line and
+  36 perturbations. Discount local gains accordingly.
+- **`de_wilcoxon_direction_fidelity` is not yet reproduced.** It keeps the wrong
+  sign (+0.365 local vs −0.172 leaderboard) even after the structural correction,
+  so this is not a sampling artefact. The remaining variable is the target line:
+  transfer appears to preserve DE direction into H1 but not into the challenge's
+  contexts. That is the sharpest open question here, and it becomes testable the
+  moment a third cell line exists.
+
+Reproduce with:
+
+```bash
+.venv/bin/python scripts/phase6_harness.py \
+    --held-out vcc2025_h1/H1 --effects-from replogle2022/K562 \
+    --predictor delta_transfer --all-perts --limit-perts 36 --max-ntc 3000
+```
+
+⚠️ `--max-ntc` exists for tractability only: cell-eval2 densifies, and the
+control arm rides into every comparison, so the full 18,400 controls with 150
+perturbations exceeds a 22 GB machine. Anchors are only fully meaningful at full
+control size — subsample for iteration, not for a number you intend to quote.
