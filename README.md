@@ -148,6 +148,11 @@ a laptop.
 
 ## If you are an agent working in this repo
 
+**Building the model? Read `HANDOFF.md`** — it is the Phase 7 brief: what the
+judge gives you, the training data on disk, the floor to beat, and the finding
+that should drive the architecture (cross-line delta transfer gets direction
+right only 53.7% of the time).
+
 Read **`CLAUDE.md` first** — it is the non-negotiable contract, and it encodes
 failures that already cost real time. In particular: `/tmp` is a RAM-backed
 tmpfs on the dev machine, anything touching a multi-GB matrix runs under
