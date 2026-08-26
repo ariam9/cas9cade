@@ -228,7 +228,7 @@ del M, out_ad
 sh(f"python {WORK}/repo/scripts/phase4_precompute.py "
    f"--dataset replogle2022 --cell-line K562 "
    f"--harmonized {dest} --rendered {dest} "
-   f"--out {WORK}/reference --shard-size 20")
+   f"--out {WORK}/reference --shard-size 40")
 sh(f"rm -rf {WORK}/repo {WORK}/reference/de_shards__replogle2022__K562")
 print(f"\nDONE in {time.time()-t0:.0f}s")
 for f in sorted((WORK / "reference").glob("*")):
