@@ -62,6 +62,23 @@ sys.path.insert(0, f"{WORK}/repo/src")
 import numpy as np, pandas as pd, h5py, anndata as ad
 from scipy import sparse
 
+# Preflight EVERY module this run will eventually need -- including the ones that
+# only affect SPEED. cell-eval2 merely warns when pdex is absent and silently
+# falls back to scanpy at ~1/10th speed; that warning cost an 11-hour run which
+# hit the 12-hour session limit at shard 19 of 20. A warning buried in a log is
+# not a safeguard. Fail here, in the first seconds, not ten hours in.
+_missing = []
+for _m in ("anndata", "scipy", "pandas", "numpy", "h5py", "cell_eval2", "pdex"):
+    try:
+        __import__(_m)
+    except ImportError:
+        _missing.append(_m)
+if _missing:
+    sys.exit(f"FATAL: missing modules {_missing} — this run would either crash "
+             f"later or silently fall back to a ~10x slower path. Fix "
+             f"requirements.txt rather than proceeding.")
+print("preflight: all required modules present (incl. pdex, the fast DE backend)", flush=True)
+
 TMP = _scratch()
 print(f"scratch: {TMP} ({__import__('shutil').disk_usage(TMP).free/2**30:,.0f} GB free)", flush=True)
 
