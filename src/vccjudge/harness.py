@@ -88,6 +88,44 @@ class DeltaTransfer:
         return out
 
 
+@dataclass
+class TransportWeightedTransfer:
+    """Idea 5 (vcc2026-architecture-ideas.pdf): DeltaTransfer, but the donor's
+    effect for gene g is shrunk toward "no change" by how much donor and
+    target agree in g's own functional neighborhood, not by a fixed global
+    clip alone.
+
+    `neighbor_idx`: {gene -> array of axis indices}. An empty dict forces
+    every perturbation onto the whole-axis fallback -- this is what makes
+    `transport_transfer_global` (the A/B baseline) and `transport_transfer`
+    (the gene-specific arm) the same code path in phase6_harness.py.
+    """
+
+    effects: pd.DataFrame          # perturbation x gene, CPM-space delta (donor)
+    control_cpm: np.ndarray        # TARGET line's own control profile, CPM
+    donor_control_cpm: np.ndarray  # DONOR line's own control profile, CPM
+    neighbor_idx: dict
+    name: str = "transport_transfer"
+
+    def predict(self, controls, perturbations, rng):
+        from .neighborhood import neighbourhood_confidence
+
+        n = controls.shape[0]
+        out = []
+        for p in perturbations:
+            pick = np.sort(rng.choice(n, size=min(CELLS_PER_PERT, n), replace=False))
+            block = controls[pick]
+            if p in self.effects.index:
+                pert_cpm = self.control_cpm + self.effects.loc[p].to_numpy(dtype=np.float64)
+                raw_ratios = effect_ratios(np.clip(pert_cpm, 0, None), self.control_cpm)
+                conf = neighbourhood_confidence(self.donor_control_cpm, self.control_cpm,
+                                                 self.neighbor_idx.get(p))
+                ratios = 1.0 + conf * (raw_ratios - 1.0)
+                block = apply_effect(block, ratios.astype(np.float32), rng)
+            out.append((p, block))
+        return out
+
+
 def assemble(predictions, axis_symbols) -> "object":
     """Stack a predictor's per-perturbation blocks into one scoreable AnnData."""
     import anndata as ad

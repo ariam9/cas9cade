@@ -22,7 +22,8 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from vccjudge.harness import (  # noqa: E402
-    CELLS_PER_PERT, ContextMean, DeltaTransfer, assemble, leakage_check,
+    CELLS_PER_PERT, ContextMean, DeltaTransfer, TransportWeightedTransfer,
+    assemble, leakage_check,
 )
 from vccjudge.regime import NON_TARGETING, group_rng  # noqa: E402
 
@@ -50,7 +51,8 @@ def main() -> int:
     ap.add_argument("--held-out", required=True, help="dataset/cell_line, e.g. vcc2025_h1/H1")
     ap.add_argument("--effects-from", default=None, help="dataset/cell_line supplying the deltas")
     ap.add_argument("--predictor", default="delta_transfer",
-                    choices=["delta_transfer", "context_mean"])
+                    choices=["delta_transfer", "context_mean",
+                             "transport_transfer", "transport_transfer_global"])
     ap.add_argument("--regime-dir", default="data/regime")
     ap.add_argument("--ref-dir", default="artifacts/reference")
     ap.add_argument("--out", default="data/harness")
@@ -94,7 +96,7 @@ def main() -> int:
         targets = sorted(set(obs.tolist()) - {NON_TARGETING})
     else:
         if not a.effects_from:
-            sys.exit("FATAL: --effects-from is required for delta_transfer")
+            sys.exit(f"FATAL: --effects-from is required for {a.predictor}")
         ef_ds, ef_line = a.effects_from.split("/")
         leakage_check(f"{ho_ds}/{ho_line}", f"{ef_ds}/{ef_line}")
         ef = pd.read_parquet(Path(a.ref_dir) / f"reference_effects__{ef_ds}__{ef_line}.parquet")
@@ -102,7 +104,29 @@ def main() -> int:
         ef = ef.reindex(columns=axis).fillna(0.0)
         ctrl_sum = np.asarray(controls.sum(axis=0)).ravel()
         ctrl_cpm = ctrl_sum / max(ctrl_sum.sum(), 1) * 1e6
-        pred = DeltaTransfer(effects=ef, control_cpm=ctrl_cpm)
+
+        if a.predictor == "delta_transfer":
+            pred = DeltaTransfer(effects=ef, control_cpm=ctrl_cpm)
+        else:
+            donor_cpm_path = Path(a.ref_dir) / f"{ef_ds}_control_cpm__full_axis.parquet"
+            if not donor_cpm_path.exists():
+                sys.exit(f"FATAL: {donor_cpm_path} not found — run scripts/phase4_precompute.py "
+                         f"for {a.effects_from} first (writes it alongside reference_effects)")
+            donor_cpm_df = pd.read_parquet(donor_cpm_path)
+            donor_cpm = donor_cpm_df.set_index("gene")["cpm"].reindex(axis).fillna(0.0).to_numpy()
+            neighbor_idx: dict = {}
+            if a.predictor == "transport_transfer":
+                nb_path = Path(a.ref_dir) / f"{ef_ds}_coexpr_neighbors__panel.parquet"
+                if not nb_path.exists():
+                    sys.exit(f"FATAL: {nb_path} not found — run scripts/phase7_neighbors_build.py")
+                nb = pd.read_parquet(nb_path)
+                axis_pos = {g: i for i, g in enumerate(axis)}
+                for g, grp in nb.groupby("gene"):
+                    neighbor_idx[g] = np.array(
+                        [axis_pos[ng] for ng in grp["neighbor_gene"] if ng in axis_pos])
+            pred = TransportWeightedTransfer(effects=ef, control_cpm=ctrl_cpm,
+                                              donor_control_cpm=donor_cpm, neighbor_idx=neighbor_idx,
+                                              name=a.predictor)
         allp = sorted(set(obs.tolist()) - {NON_TARGETING})
         if a.all_perts:
             targets = allp

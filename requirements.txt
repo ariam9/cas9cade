@@ -16,6 +16,11 @@ numpy>=1.26
 pandas>=2.2,<3
 pyarrow>=14
 pyyaml>=6
+# Idea 3 (penetrance mixture, Phase 7): GaussianMixture for fitting the
+# responder/non-responder split. Was already resolvable as a transitive dep
+# of something else in this file (see requirements.lock.txt) -- promoted to
+# direct since vccjudge now imports it itself, not just an incidental pin.
+scikit-learn>=1.3
 
 # The competition's own scorer. Phase 4 computes reference DE with its routine
 # and Phase 5 wraps its vcc2026 preset, so reference DE and scored DE cannot

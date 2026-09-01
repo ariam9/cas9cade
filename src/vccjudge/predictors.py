@@ -47,17 +47,26 @@ def stochastic_round(x: np.ndarray, rng: np.random.Generator) -> np.ndarray:
     return fl + (rng.random(x.shape) < (x - fl))
 
 
+def cap_library_size(X, max_counts: int = 1_000_000):
+    """Contract item 7: <=max_counts stored per cell.
+
+    Shared by every emitter that scales real cells' counts -- never hit at
+    challenge depth, but cheap to guarantee.
+    """
+    totals = np.asarray(X.sum(axis=1)).ravel()
+    over = totals > max_counts
+    if over.any():
+        for i in np.flatnonzero(over):
+            s, e = X.indptr[i], X.indptr[i + 1]
+            X.data[s:e] = np.floor(X.data[s:e] * (max_counts / totals[i]))
+        X.eliminate_zeros()
+    return X
+
+
 def apply_effect(X, ratios: np.ndarray, rng: np.random.Generator, max_counts: int = 1_000_000):
     """Scale a CSR block of control cells by a per-gene ratio, keep counts integral."""
     X = X.tocsr().astype(np.float64)
     X.data *= ratios[X.indices]
     X.data = stochastic_round(X.data, rng)
     X.eliminate_zeros()
-    totals = np.asarray(X.sum(axis=1)).ravel()
-    over = totals > max_counts
-    if over.any():  # contract item 7; never hit at challenge depth, but cheap to guarantee
-        for i in np.flatnonzero(over):
-            s, e = X.indptr[i], X.indptr[i + 1]
-            X.data[s:e] = np.floor(X.data[s:e] * (max_counts / totals[i]))
-        X.eliminate_zeros()
-    return X.astype(np.float32)
+    return cap_library_size(X, max_counts).astype(np.float32)

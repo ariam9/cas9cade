@@ -101,6 +101,13 @@ def main() -> int:
                 adata.file.close()
         if NON_TARGETING not in cpm.index:
             sys.exit(f"FATAL: no '{NON_TARGETING}' group in {har}")
+        # Idea 5 (transportability weighting) needs a donor line's OWN control
+        # CPM, not just its delta -- the NTC row is computed right here then
+        # normally discarded below, so persist it while it's in hand.
+        ctrl_cpm = cpm.loc[NON_TARGETING].rename("cpm").rename_axis("gene").reset_index()
+        ctrl_path = out / f"{a.dataset}_control_cpm__full_axis.parquet"
+        ctrl_cpm.to_parquet(ctrl_path, index=False)
+        print(f"  wrote {ctrl_path}")
         delta = cpm.drop(index=NON_TARGETING).sub(cpm.loc[NON_TARGETING], axis=1)
         delta.insert(0, "n_cells", [n_cells[p] for p in delta.index])
         delta.index.name = "perturbation"

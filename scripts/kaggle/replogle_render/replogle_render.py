@@ -218,6 +218,49 @@ json.dump({"n_cells": int(M.shape[0]), "n_groups": len(meta), "n_short": n_short
           open(WORK / "replogle_K562__seed0.json", "w"), indent=2)
 print(f"\nrendered -> {dest} ({dest.stat().st_size/2**20:,.0f} MB, on scratch)")
 print(f"  {M.shape[0]:,} cells | nnz {M.nnz:,} | median UMI {achieved:,.0f}", flush=True)
+
+# ---- Phase 7, part 1: penetrance fit (Idea 3 step 1) + transportability   -
+#      donor artifacts (Idea 5), both from the in-memory render before it's -
+#      freed. Only small tables leave this kernel -- see the 546 MB failure -
+#      note above; nothing here repeats that.                              -
+REF = WORK / "reference"; REF.mkdir(parents=True, exist_ok=True)
+from vccjudge.penetrance import fit_penetrance_all
+from vccjudge.neighborhood import control_pseudobulk_cpm, coexpression_neighbors
+
+print("\n[idea 3 step 1] fitting penetrance on K562...", flush=True)
+t1 = time.time()
+pi_df = fit_penetrance_all(out_ad)
+pi_path = REF / "k562_penetrance_fit__seed0.parquet"
+pi_df.to_parquet(pi_path, index=False)
+frac_near_one = float((pi_df.pi_hat > 0.95).mean())
+print(f"  wrote {pi_path} ({len(pi_df)} perturbations, "
+      f"{frac_near_one:.1%} with pi_hat>0.95, {time.time()-t1:.0f}s)", flush=True)
+
+print("\n[idea 5] building K562 donor-side control CPM + co-expression neighbors...", flush=True)
+t3 = time.time()
+obs_ntc = out_ad.obs["perturbation"].astype(str).to_numpy() == "non-targeting"
+ctrl_block = out_ad.X.tocsr()[np.flatnonzero(obs_ntc)]
+axis_now = list(map(str, out_ad.var_names))
+
+ctrl_cpm = control_pseudobulk_cpm(ctrl_block)
+ctrl_cpm_path = REF / "replogle2022_control_cpm__full_axis.parquet"
+pd.DataFrame({"gene": axis_now, "cpm": ctrl_cpm}).to_parquet(ctrl_cpm_path, index=False)
+
+panel_path = Path(f"{WORK}/repo/data/bundle/pert_counts.csv")
+if panel_path.exists():
+    panel = pd.read_csv(panel_path)["target_gene"].astype(str).tolist()
+    neighbors = coexpression_neighbors(ctrl_block, panel, axis_now, k=50)
+    nb_rows = [{"gene": g, "neighbor_gene": axis_now[j], "rank": r}
+               for g, idxs in neighbors.items() for r, j in enumerate(idxs)]
+    nb_path = REF / "replogle2022_coexpr_neighbors__panel.parquet"
+    pd.DataFrame(nb_rows).to_parquet(nb_path, index=False)
+    print(f"  wrote {ctrl_cpm_path.name}, {nb_path.name} "
+          f"({len(panel)} panel genes, {time.time()-t3:.0f}s)", flush=True)
+else:
+    print(f"  SKIP co-expression neighbors -- {panel_path} not in the clone "
+          f"(force-track data/bundle/pert_counts.csv)", flush=True)
+del ctrl_block
+
 del M, out_ad
 
 # ---- Phase 4 here: reduce to the small artifacts the judge consumes -------
@@ -229,6 +272,41 @@ sh(f"python {WORK}/repo/scripts/phase4_precompute.py "
    f"--dataset replogle2022 --cell-line K562 "
    f"--harmonized {dest} --rendered {dest} "
    f"--out {WORK}/reference --shard-size 40")
+
+# ---- Phase 7, part 2: penetrance transfer check (Idea 3 step 2) -----------
+# Needs K562's OWN reference_effects/nreal_table, which the phase4_precompute
+# call above just produced -- so this runs after it, not with part 1. Reads
+# `dest` back from scratch (still there; only phase4_precompute's shard
+# checkpoints get removed below) rather than keeping the full render in
+# memory the whole time.
+h1_model_path = Path(f"{WORK}/repo/artifacts/reference/h1_penetrance_basal_model.json")
+ref_eff_path = REF / "reference_effects__replogle2022__K562.parquet"
+nreal_path = REF / "nreal_table__replogle2022__K562.parquet"
+if h1_model_path.exists() and ref_eff_path.exists() and nreal_path.exists():
+    print("\n[idea 3 step 2] penetrance transfer-check on K562...", flush=True)
+    t2 = time.time()
+    from vccjudge.penetrance import penetrance_transfer_check
+
+    src2 = ad.read_h5ad(dest)
+    basal_model = json.loads(h1_model_path.read_text())
+    reference_effects = pd.read_parquet(ref_eff_path)
+    nreal_table = pd.read_parquet(nreal_path)
+    summary, table = penetrance_transfer_check(src2, reference_effects, nreal_table, basal_model)
+    del src2
+
+    table.to_parquet(REF / "k562_penetrance_transfer_check_table.parquet", index=False)
+    json.dump(summary, open(REF / "k562_penetrance_transfer_check.json", "w"), indent=2)
+    print(f"  mae_fixed(all)={summary['mae_fixed_all']:.2f} "
+          f"mae_mixed(all)={summary['mae_mixed_all']:.2f} | "
+          f"mae_fixed(nreal>={summary['min_nreal_strong']}, n={summary['n_strong']})="
+          f"{summary['mae_fixed_strong']:.2f} mae_mixed={summary['mae_mixed_strong']:.2f}",
+          flush=True)
+    print(f"  VERDICT: {summary['verdict']}", flush=True)
+    print(f"  wrote k562_penetrance_transfer_check.json ({time.time()-t2:.0f}s)", flush=True)
+else:
+    print(f"\n[idea 3 step 2] SKIP -- missing one of {h1_model_path.name}, "
+          f"{ref_eff_path.name}, {nreal_path.name}", flush=True)
+
 sh(f"rm -rf {WORK}/repo {WORK}/reference/de_shards__replogle2022__K562")
 print(f"\nDONE in {time.time()-t0:.0f}s")
 for f in sorted((WORK / "reference").glob("*")):
