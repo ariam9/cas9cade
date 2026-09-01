@@ -98,18 +98,36 @@ print(f"axis {len(axis_sym):,} genes | want {len(keep_perts)} perturbations", fl
 
 # ---- fetch ----------------------------------------------------------------
 src = TMP / "replogle_k562_gwps.h5ad"
-if not src.exists():
-    t = time.time()
-    sh(f"curl -fL --retry 5 -o {src} '{URL}'")
-    mb = src.stat().st_size / 2**20
-    print(f"  {mb:,.0f} MB in {time.time()-t:.0f}s ({mb/max(time.time()-t,1):.0f} MB/s)")
+
+
+def _md5_ok() -> bool:
     import hashlib
     h = hashlib.md5()
     with open(src, "rb") as f:
         for b in iter(lambda: f.read(1 << 24), b""):
             h.update(b)
-    if h.hexdigest() != MD5:
-        sys.exit(f"FATAL: md5 {h.hexdigest()} != {MD5}")
+    return h.hexdigest() == MD5
+
+
+if not src.exists() or not _md5_ok():
+    t = time.time()
+    # -C - resumes a partial file instead of restarting from 0, and
+    # --retry-all-errors makes curl's own retry loop cover a truncated
+    # transfer (CURLE_PARTIAL_FILE, exit 18) rather than only the default
+    # HTTP-transient set. Without both, every one of curl's --retry attempts
+    # re-downloads the full 8.2 GB from scratch -- which is why two prior
+    # runs failed at this exact step and took progressively LONGER before
+    # ultimately giving up (retry cost grows with how much was already
+    # transferred, instead of shrinking).
+    sh(f"curl -fL -C - --retry 10 --retry-all-errors --retry-delay 5 -o {src} '{URL}'")
+    if not _md5_ok():
+        print("  md5 mismatch after a resumed download -- one clean retry", flush=True)
+        src.unlink(missing_ok=True)
+        sh(f"curl -fL --retry 10 --retry-all-errors --retry-delay 5 -o {src} '{URL}'")
+        if not _md5_ok():
+            sys.exit("FATAL: md5 mismatch persists after a clean re-download")
+    mb = src.stat().st_size / 2**20
+    print(f"  {mb:,.0f} MB in {time.time()-t:.0f}s ({mb/max(time.time()-t,1):.0f} MB/s)")
     print("  md5 OK", flush=True)
 
 # ---- inspect, and assert every assumption ---------------------------------
